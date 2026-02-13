@@ -14,13 +14,13 @@
         
         /* Control Panel Styling */
         .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; gap: 30px; align-items: center; flex-wrap: wrap; }
-        .control-group { display: flex; flex-direction: column; gap: 5px; }
-        select { padding: 10px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; min-width: 180px; }
+        .control-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; }
+        select { padding: 10px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; width: 100%; }
         label { font-weight: bold; color: #34495e; font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px; }
         
         /* Grid Layout */
         .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); min-height: 400px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); min-height: 400px; position: relative; }
         
         /* Metrics Styling */
         .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
@@ -33,6 +33,15 @@
         .bg-blue { background: #eaf2f8; }
         .text-green { color: #27ae60; }
         .text-blue { color: #2980b9; }
+
+        /* Loading Text Styling */
+        .loading-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #bdc3c7; font-size: 1.2em; }
+
+        /* --- MOBILE RESPONSIVENESS FIX --- */
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: 1fr; } /* Stack map and metrics vertically */
+            .controls { flex-direction: column; gap: 15px; } /* Stack filters */
+        }
     </style>
 </head>
 <body>
@@ -71,12 +80,12 @@
     <div class="grid">
         <div class="card">
             <h3 style="margin-top:0;">Utah Impact Map</h3>
-            <div id="utahMap" style="height: 500px;">Loading Map...</div>
+            <div id="utahMap" style="height: 500px;"><div class="loading-text">Loading Map...</div></div>
         </div>
         
         <div class="card">
             <h3 style="margin-top:0;">Program Metrics</h3>
-            <div id="metricsBox">Loading...</div>
+            <div id="metricsBox"><div class="loading-text">Loading Data...</div></div>
             
             <h3 style="margin-top:20px;">Cost vs. Savings</h3>
             <div id="costChart" style="height: 300px;"></div>
@@ -97,24 +106,18 @@
 
     // 2. Populate Dropdowns
     function populateFilters() {
-        // Populate Years (Sort descending to show newest first, exclude 0/nulls)
         let years = [...new Set(globalData.map(d => d.Year))].filter(y => y > 0).sort((a,b) => b-a);
         let yearSel = document.getElementById('yearFilter');
         years.forEach(y => {
             let opt = document.createElement('option');
-            opt.value = y;
-            opt.innerHTML = y;
-            yearSel.appendChild(opt);
+            opt.value = y; opt.innerHTML = y; yearSel.appendChild(opt);
         });
 
-        // Populate Counties
         let counties = [...new Set(globalData.map(d => d.County))].filter(Boolean).sort();
         let countySel = document.getElementById('countyFilter');
         counties.forEach(c => {
             let opt = document.createElement('option');
-            opt.value = c;
-            opt.innerHTML = c;
-            countySel.appendChild(opt);
+            opt.value = c; opt.innerHTML = c; countySel.appendChild(opt);
         });
     }
 
@@ -126,7 +129,6 @@
 
         // Filter Data
         let filtered = globalData.filter(d => {
-            // Check Year (Loose equality because dropdown is string "2025" vs int 2025)
             let yearMatch = (yearSel === "All") || (d.Year == yearSel);
             let statusMatch = (statusSel === "All") || (d['Implemented? Yes/No/In Progress'] === statusSel);
             let countyMatch = (countySel === "All") || (d.County === countySel);
@@ -140,17 +142,14 @@
 
     // 4. Render Metrics Box
     function renderMetrics(data) {
-        // Counts
         let uniqueReports = new Set(data.map(d => d['Report Number']));
         let assessmentCount = uniqueReports.size;
         let recommendationCount = data.length;
 
-        // Aggregates
         let totalCO2 = d3.sum(data, d => d.Total_CO2_Tons);
         let totalSavings = d3.sum(data, d => d['Total Cost Savings']);
         let totalCars = d3.sum(data, d => d.Cars_Equivalent);
         
-        // Pollutants (Using the new Python variable names)
         let totalNOx = d3.sum(data, d => d.Total_NOx_lb);
         let totalSO2 = d3.sum(data, d => d.Total_SO2_lb);
         let totalPM25 = d3.sum(data, d => d.Total_PM25_lb);
@@ -198,7 +197,7 @@
         `;
     }
 
-    // 5. Render Map (Utah Zoom - Now Straight!)
+    // 5. Render Map (Mercator + Utah Zoom)
     function renderMap(data) {
         let fipsMap = d3.rollup(data, v => d3.sum(v, d => d.Total_CO2_Tons), d => d.FIPS);
         let locations = Array.from(fipsMap.keys());
@@ -207,7 +206,7 @@
         let hoverText = locations.map(fips => {
             let match = data.find(d => d.FIPS === fips);
             let val = fipsMap.get(fips).toFixed(1);
-            return match ? `${match.County}: ${val} Tons` : fips;
+            return match ? `${match.County}: ${d3.format(",")(val)} Tons` : fips;
         });
 
         // Background Layer (Gray Utah)
@@ -229,9 +228,8 @@
         let layout = {
             title: { text: 'Utah CO2 Reduction by County', y: 0.95 },
             geo: {
-                projection: { type: 'mercator' }, // <--- THIS MAKES IT STRAIGHT
+                projection: { type: 'mercator' }, // Straight lines
                 showlakes: false,
-                // --- ZOOM SETTINGS FOR UTAH ---
                 center: { lon: -111.5, lat: 39.4 }, 
                 lonaxis: { range: [-114.5, -108.5] }, 
                 lataxis: { range: [36.5, 42.5] }
@@ -242,7 +240,7 @@
         Plotly.newPlot('utahMap', [backgroundTrace, dataTrace], layout, {responsive: true});
     }
 
-    // 6. Render Cost Chart
+    // 6. Render Cost Chart (With Currency formatting)
     function renderCostChart(data) {
         let trace = {
             x: data.map(d => d['Implementation Costs']),
@@ -251,8 +249,9 @@
             marker: { size: 12, color: data.map(d => d.Total_CO2_Tons), colorscale: 'Viridis', showscale: false }
         };
         Plotly.newPlot('costChart', [trace], {
-            xaxis: {title: 'Implementation Cost ($)'}, yaxis: {title: 'Annual Savings ($)'},
-            margin: {l:50, r:20, t:20, b:40}
+            xaxis: {title: 'Implementation Cost', tickprefix: '$'}, // Adds $
+            yaxis: {title: 'Annual Savings', tickprefix: '$'},      // Adds $
+            margin: {l:60, r:20, t:20, b:40}
         }, {responsive: true});
     }
 </script>
