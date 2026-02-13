@@ -2,8 +2,8 @@ name: Update BERP Tracking
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs at Midnight UTC
-  workflow_dispatch:      # Allows you to click a button to run it manually
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,15 +19,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11'  # <--- Upgraded to remove warnings
 
-      - name: Install libraries
+      - name: Install dependencies
         run: |
           pip install pandas plotly gspread google-auth
 
       - name: Run Report Generator
         env:
-          # This connects your Secret to the script
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python build_site.py
 
@@ -36,7 +35,6 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Check if index.html changed
           if [[ -n $(git status -s) ]]; then
             git add index.html
             git commit -m "Auto-update from Google Sheets"
