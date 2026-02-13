@@ -13,10 +13,10 @@
         .header { background: #1a5276; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
         
         /* Control Panel Styling */
-        .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; gap: 30px; align-items: center; flex-wrap: wrap; }
-        .control-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; }
-        select { padding: 10px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; width: 100%; }
-        label { font-weight: bold; color: #34495e; font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px; }
+        .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+        .control-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 180px; }
+        select { padding: 10px; font-size: 15px; border-radius: 4px; border: 1px solid #ccc; width: 100%; background: #fff; }
+        label { font-weight: bold; color: #34495e; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.5px; }
         
         /* Grid Layout */
         .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; }
@@ -35,12 +35,12 @@
         .text-blue { color: #2980b9; }
 
         /* Loading Text Styling */
-        .loading-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #bdc3c7; font-size: 1.2em; }
+        .loading-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #bdc3c7; font-size: 1.2em; pointer-events: none; }
 
-        /* --- MOBILE RESPONSIVENESS FIX --- */
+        /* --- MOBILE RESPONSIVENESS --- */
         @media (max-width: 900px) {
-            .grid { grid-template-columns: 1fr; } /* Stack map and metrics vertically */
-            .controls { flex-direction: column; gap: 15px; } /* Stack filters */
+            .grid { grid-template-columns: 1fr; }
+            .controls { flex-direction: column; gap: 15px; }
         }
     </style>
 </head>
@@ -75,12 +75,25 @@
                 <option value="All">All Counties</option>
                 </select>
         </div>
+
+        <div class="control-group">
+            <label style="color:#e67e22;">Map Metric:</label>
+            <select id="metricFilter" onchange="updateDashboard()">
+                <option value="Total_CO2_Tons">CO2 Reduced (Tons)</option>
+                <option value="Total_NOx_lb">NOx Reduced (lbs)</option>
+                <option value="Total_SO2_lb">SO2 Reduced (lbs)</option>
+                <option value="Total_PM25_lb">PM2.5 Reduced (lbs)</option>
+                <option value="Total Cost Savings">Cost Savings ($)</option>
+            </select>
+        </div>
     </div>
 
     <div class="grid">
         <div class="card">
-            <h3 style="margin-top:0;">Utah Impact Map</h3>
-            <div id="utahMap" style="height: 500px;"><div class="loading-text">Loading Map...</div></div>
+            <h3 id="mapTitle" style="margin-top:0;">Utah Impact Map</h3>
+            <div id="utahMap" style="height: 500px;">
+                <div class="loading-text">Loading Map...</div>
+            </div>
         </div>
         
         <div class="card">
@@ -126,6 +139,7 @@
         let yearSel = document.getElementById('yearFilter').value;
         let statusSel = document.getElementById('statusFilter').value;
         let countySel = document.getElementById('countyFilter').value;
+        let metricSel = document.getElementById('metricFilter').value; // Get the map metric
 
         // Filter Data
         let filtered = globalData.filter(d => {
@@ -135,7 +149,8 @@
             return yearMatch && statusMatch && countyMatch;
         });
 
-        renderMap(filtered);
+        // Pass the metric to renderMap
+        renderMap(filtered, metricSel);
         renderMetrics(filtered);
         renderCostChart(filtered);
     }
@@ -197,16 +212,35 @@
         `;
     }
 
-    // 5. Render Map (Mercator + Utah Zoom)
-    function renderMap(data) {
-        let fipsMap = d3.rollup(data, v => d3.sum(v, d => d.Total_CO2_Tons), d => d.FIPS);
+    // 5. Render Map (With Dynamic Metric & Fixes)
+    function renderMap(data, metric) {
+        // --- FIX 1: CLEAR LOADING TEXT ---
+        // We manually empty the div so the loading text disappears completely
+        document.getElementById('utahMap').innerHTML = '';
+
+        // Determine nice label for hover
+        let metricLabels = {
+            'Total_CO2_Tons': 'Tons CO2',
+            'Total_NOx_lb': 'lbs NOx',
+            'Total_SO2_lb': 'lbs SO2',
+            'Total_PM25_lb': 'lbs PM2.5',
+            'Total Cost Savings': 'Savings ($)'
+        };
+        let label = metricLabels[metric] || 'Value';
+
+        // Update Title
+        document.getElementById('mapTitle').innerText = `Utah Impact: ${label}`;
+
+        // Aggregate Data based on selected metric
+        let fipsMap = d3.rollup(data, v => d3.sum(v, d => d[metric]), d => d.FIPS);
         let locations = Array.from(fipsMap.keys());
         let zValues = Array.from(fipsMap.values());
         
         let hoverText = locations.map(fips => {
             let match = data.find(d => d.FIPS === fips);
-            let val = fipsMap.get(fips).toFixed(1);
-            return match ? `${match.County}: ${d3.format(",")(val)} Tons` : fips;
+            let val = fipsMap.get(fips);
+            // Format number (comma separated, 1 decimal)
+            return match ? `${match.County}: ${d3.format(",.1f")(val)} ${label}` : fips;
         });
 
         // Background Layer (Gray Utah)
@@ -218,29 +252,37 @@
             showscale: false, marker: { line: { width: 0.5, color: '#bdbdbd' } }, hoverinfo: 'skip'
         };
 
-        // Data Layer (Teal Projects)
+        // Data Layer
         let dataTrace = {
             type: 'choropleth', geojson: geoJsonUrl, locations: locations, z: zValues, text: hoverText,
-            colorscale: 'Teal', marker: { line: { width: 1, color: 'white' } }, colorbar: { title: 'CO2 (Tons)' },
+            colorscale: 'Teal', marker: { line: { width: 1, color: 'white' } }, 
+            colorbar: { title: label },
             hovertemplate: '<b>%{text}</b><extra></extra>' 
         };
 
         let layout = {
-            title: { text: 'Utah CO2 Reduction by County', y: 0.95 },
+            // Title handled in HTML above to avoid border issues
+            margin: {l:0, r:0, t:0, b:0}, 
             geo: {
-                projection: { type: 'mercator' }, // Straight lines
+                projection: { type: 'mercator' },
                 showlakes: false,
+                
+                // --- FIX 2: REMOVE BLACK BORDER ---
+                showframe: false,      // Removes the box around the map
+                showcoastlines: false, // Removes coastlines (irrelevant for Utah)
+                
+                // Zoom
                 center: { lon: -111.5, lat: 39.4 }, 
                 lonaxis: { range: [-114.5, -108.5] }, 
                 lataxis: { range: [36.5, 42.5] }
             },
-            margin: {l:0, r:0, t:30, b:0}, dragmode: false
+            dragmode: false
         };
 
         Plotly.newPlot('utahMap', [backgroundTrace, dataTrace], layout, {responsive: true});
     }
 
-    // 6. Render Cost Chart (With Currency formatting)
+    // 6. Render Cost Chart
     function renderCostChart(data) {
         let trace = {
             x: data.map(d => d['Implementation Costs']),
@@ -249,8 +291,8 @@
             marker: { size: 12, color: data.map(d => d.Total_CO2_Tons), colorscale: 'Viridis', showscale: false }
         };
         Plotly.newPlot('costChart', [trace], {
-            xaxis: {title: 'Implementation Cost', tickprefix: '$'}, // Adds $
-            yaxis: {title: 'Annual Savings', tickprefix: '$'},      // Adds $
+            xaxis: {title: 'Implementation Cost', tickprefix: '$'}, 
+            yaxis: {title: 'Annual Savings', tickprefix: '$'},      
             margin: {l:60, r:20, t:20, b:40}
         }, {responsive: true});
     }
