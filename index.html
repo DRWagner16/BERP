@@ -2,29 +2,37 @@
 <html>
 <head>
     <title>BERP Interactive Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
     
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #f4f4f9; margin: 0; padding: 20px; }
         .dashboard-container { max-width: 1400px; margin: auto; }
         .header { background: #1a5276; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
         
-        /* Updated Controls Layout */
+        /* Control Panel Styling */
         .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; gap: 30px; align-items: center; flex-wrap: wrap; }
         .control-group { display: flex; flex-direction: column; gap: 5px; }
         select { padding: 10px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; min-width: 180px; }
         label { font-weight: bold; color: #34495e; font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px; }
         
+        /* Grid Layout */
         .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; }
         .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); min-height: 400px; }
         
-        /* Updated Metrics Styling */
+        /* Metrics Styling */
         .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
         .metric-box { text-align: center; padding: 15px; background: #ecf0f1; border-radius: 8px; }
-        .metric-val { font-size: 2em; font-weight: bold; color: #2c3e50; }
+        .metric-val { font-size: 1.8em; font-weight: bold; color: #2c3e50; }
         .metric-lbl { color: #7f8c8d; font-size: 0.85em; }
+        
+        /* Specialized Colors */
+        .bg-green { background: #e8f8f5; }
+        .bg-blue { background: #eaf2f8; }
+        .text-green { color: #27ae60; }
+        .text-blue { color: #2980b9; }
     </style>
 </head>
 <body>
@@ -80,14 +88,16 @@
     let globalData = [];
     const geoJsonUrl = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"; 
 
+    // 1. Fetch Data
     d3.json('site_data.json').then(function(data) {
         globalData = data;
         populateFilters();
         updateDashboard();
     });
 
+    // 2. Populate Dropdowns
     function populateFilters() {
-        // 1. Populate Years (Sort descending to show newest first)
+        // Populate Years (Sort descending to show newest first, exclude 0/nulls)
         let years = [...new Set(globalData.map(d => d.Year))].filter(y => y > 0).sort((a,b) => b-a);
         let yearSel = document.getElementById('yearFilter');
         years.forEach(y => {
@@ -97,7 +107,7 @@
             yearSel.appendChild(opt);
         });
 
-        // 2. Populate Counties
+        // Populate Counties
         let counties = [...new Set(globalData.map(d => d.County))].filter(Boolean).sort();
         let countySel = document.getElementById('countyFilter');
         counties.forEach(c => {
@@ -108,6 +118,7 @@
         });
     }
 
+    // 3. Main Update Function
     function updateDashboard() {
         let yearSel = document.getElementById('yearFilter').value;
         let statusSel = document.getElementById('statusFilter').value;
@@ -115,7 +126,7 @@
 
         // Filter Data
         let filtered = globalData.filter(d => {
-            // Check Year (Loose equality because dropdown value is string "2025" but data is int 2025)
+            // Check Year (Loose equality because dropdown is string "2025" vs int 2025)
             let yearMatch = (yearSel === "All") || (d.Year == yearSel);
             let statusMatch = (statusSel === "All") || (d['Implemented? Yes/No/In Progress'] === statusSel);
             let countyMatch = (countySel === "All") || (d.County === countySel);
@@ -127,17 +138,22 @@
         renderCostChart(filtered);
     }
 
+    // 4. Render Metrics Box
     function renderMetrics(data) {
-        // --- METRIC 1: Unique Assessments (Report Numbers) ---
-        // We use a Set to count unique values only
+        // Counts
         let uniqueReports = new Set(data.map(d => d['Report Number']));
         let assessmentCount = uniqueReports.size;
-
-        // --- METRIC 2: Recommendations (Total Rows) ---
         let recommendationCount = data.length;
 
+        // Aggregates
         let totalCO2 = d3.sum(data, d => d.Total_CO2_Tons);
         let totalSavings = d3.sum(data, d => d['Total Cost Savings']);
+        let totalCars = d3.sum(data, d => d.Cars_Equivalent);
+        
+        // Pollutants (Using the new Python variable names)
+        let totalNOx = d3.sum(data, d => d.Total_NOx_lb);
+        let totalSO2 = d3.sum(data, d => d.Total_SO2_lb);
+        let totalPM25 = d3.sum(data, d => d.Total_PM25_lb);
 
         document.getElementById('metricsBox').innerHTML = `
             <div class="metrics-grid">
@@ -149,18 +165,40 @@
                     <div class="metric-val">${recommendationCount}</div>
                     <div class="metric-lbl">Recommendations</div>
                 </div>
-                <div class="metric-box">
-                    <div class="metric-val" style="color:#27ae60">${totalCO2.toFixed(1)}</div>
-                    <div class="metric-lbl">Tons CO2 Reduced</div>
+            </div>
+
+            <div class="metric-box bg-green" style="margin-bottom:15px;">
+                <div class="metric-val text-green">${totalCO2.toFixed(1)}</div>
+                <div class="metric-lbl">Tons CO2 Reduced</div>
+                <div style="font-size:0.8em; color:#7f8c8d; margin-top:5px;">
+                    Equivalent to removing <b>${Math.round(totalCars)}</b> cars
                 </div>
-                <div class="metric-box">
-                    <div class="metric-val" style="color:#2980b9">$${d3.format(",.0f")(totalSavings)}</div>
-                    <div class="metric-lbl">Annual Savings</div>
+            </div>
+
+            <div class="metric-box bg-blue" style="margin-bottom:15px;">
+                <div class="metric-val text-blue">$${d3.format(",.0f")(totalSavings)}</div>
+                <div class="metric-lbl">Annual Cost Savings</div>
+            </div>
+
+            <h4 style="margin:10px 0 5px 0; color:#34495e; text-align:center;">Air Quality Impact (lbs)</h4>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px;">
+                <div class="metric-box" style="padding:10px;">
+                    <div class="metric-val" style="font-size:1.2em;">${d3.format(",.0f")(totalNOx)}</div>
+                    <div class="metric-lbl">NOx</div>
+                </div>
+                <div class="metric-box" style="padding:10px;">
+                    <div class="metric-val" style="font-size:1.2em;">${d3.format(",.0f")(totalSO2)}</div>
+                    <div class="metric-lbl">SO2</div>
+                </div>
+                <div class="metric-box" style="padding:10px;">
+                    <div class="metric-val" style="font-size:1.2em;">${d3.format(",.0f")(totalPM25)}</div>
+                    <div class="metric-lbl">PM2.5</div>
                 </div>
             </div>
         `;
     }
 
+    // 5. Render Map (Utah Zoom)
     function renderMap(data) {
         let fipsMap = d3.rollup(data, v => d3.sum(v, d => d.Total_CO2_Tons), d => d.FIPS);
         let locations = Array.from(fipsMap.keys());
@@ -172,15 +210,16 @@
             return match ? `${match.County}: ${val} Tons` : fips;
         });
 
-        // Background Layer
+        // Background Layer (Gray Utah)
         let allUtahFips = ["49001", "49003", "49005", "49007", "49009", "49011", "49013", "49015", "49017", "49019", "49021", "49023", "49025", "49027", "49029", "49031", "49033", "49035", "49037", "49039", "49041", "49043", "49045", "49047", "49049", "49051", "49053", "49055", "49057"];
+        
         let backgroundTrace = {
             type: 'choropleth', geojson: geoJsonUrl, locations: allUtahFips, 
             z: Array(allUtahFips.length).fill(0), colorscale: [['0.0', '#eeeeee'], ['1.0', '#eeeeee']], 
             showscale: false, marker: { line: { width: 0.5, color: '#bdbdbd' } }, hoverinfo: 'skip'
         };
 
-        // Data Layer
+        // Data Layer (Teal Projects)
         let dataTrace = {
             type: 'choropleth', geojson: geoJsonUrl, locations: locations, z: zValues, text: hoverText,
             colorscale: 'Teal', marker: { line: { width: 1, color: 'white' } }, colorbar: { title: 'CO2 (Tons)' },
@@ -191,7 +230,10 @@
             title: { text: 'Utah CO2 Reduction by County', y: 0.95 },
             geo: {
                 scope: 'usa', projection: { type: 'albers usa' }, showlakes: false,
-                center: { lon: -111.5, lat: 39.4 }, lonaxis: { range: [-114.5, -108.5] }, lataxis: { range: [36.5, 42.5] }
+                // --- ZOOM SETTINGS FOR UTAH ---
+                center: { lon: -111.5, lat: 39.4 }, 
+                lonaxis: { range: [-114.5, -108.5] }, 
+                lataxis: { range: [36.5, 42.5] }
             },
             margin: {l:0, r:0, t:30, b:0}, dragmode: false
         };
@@ -199,6 +241,7 @@
         Plotly.newPlot('utahMap', [backgroundTrace, dataTrace], layout, {responsive: true});
     }
 
+    // 6. Render Cost Chart
     function renderCostChart(data) {
         let trace = {
             x: data.map(d => d['Implementation Costs']),
