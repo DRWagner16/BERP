@@ -1,10 +1,9 @@
-name: Update Pollution Report
+name: Update BERP Tracking
 
 on:
   schedule:
-    # Runs at 00:00 UTC every day
-    - cron: '0 0 * * *'
-  workflow_dispatch: # Allows manual trigger
+    - cron: '0 0 * * *' # Runs at Midnight UTC
+  workflow_dispatch:      # Allows you to click a button to run it manually
 
 permissions:
   contents: write
@@ -22,14 +21,14 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install dependencies
+      - name: Install libraries
         run: |
-          pip install pandas openpyxl plotly requests
+          pip install pandas plotly gspread google-auth
 
       - name: Run Report Generator
         env:
-          # This passes the GitHub Secret to the Python script
-          BOX_URL: ${{ secrets.BOX_URL }}
+          # This connects your Secret to the script
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python build_site.py
 
       - name: Commit and Push changes
@@ -37,10 +36,10 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Check if there are changes before committing
+          # Check if index.html changed
           if [[ -n $(git status -s) ]]; then
             git add index.html
-            git commit -m "Automated report update"
+            git commit -m "Auto-update from Google Sheets"
             git push
           else
             echo "No changes to commit"
