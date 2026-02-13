@@ -198,7 +198,7 @@
         `;
     }
 
-    // 5. Render Map (Utah Zoom)
+    // 5. Render Map (Utah Zoom - Now Straight!)
     function renderMap(data) {
         let fipsMap = d3.rollup(data, v => d3.sum(v, d => d.Total_CO2_Tons), d => d.FIPS);
         let locations = Array.from(fipsMap.keys());
@@ -229,7 +229,9 @@
         let layout = {
             title: { text: 'Utah CO2 Reduction by County', y: 0.95 },
             geo: {
-                scope: 'usa', projection: { type: 'albers usa' }, showlakes: false,
+                scope: 'usa',
+                projection: { type: 'mercator' }, // <--- THIS MAKES IT STRAIGHT
+                showlakes: false,
                 // --- ZOOM SETTINGS FOR UTAH ---
                 center: { lon: -111.5, lat: 39.4 }, 
                 lonaxis: { range: [-114.5, -108.5] }, 
