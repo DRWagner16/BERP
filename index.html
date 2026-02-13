@@ -152,14 +152,22 @@
         }];
 
         let layout = {
+            title: {
+                text: 'Utah CO2 Reduction by County',
+                y: 0.95
+            },
             geo: {
                 scope: 'usa',
-                // Zoom into Utah roughly
-                center: { lon: -111.5, lat: 39.5 },
                 projection: { type: 'albers usa' },
-                fitbounds: "locations" // Auto-zoom to data if possible
+                showlakes: false,
+                // --- ZOOM SETTINGS FOR UTAH ---
+                // We lock the map view to Utah's coordinates
+                center: { lon: -111.5, lat: 39.4 }, 
+                lonaxis: { range: [-114.5, -108.5] },
+                lataxis: { range: [36.5, 42.5] }
             },
-            margin: {l:0, r:0, t:0, b:0}
+            margin: {l:0, r:0, t:30, b:0},
+            dragmode: false // Prevents users from accidentally panning away from Utah
         };
 
         Plotly.newPlot('utahMap', mapData, layout, {responsive: true});
