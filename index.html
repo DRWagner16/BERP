@@ -8,11 +8,17 @@
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #f4f4f9; margin: 0; padding: 20px; }
         .dashboard-container { max-width: 1400px; margin: auto; }
-        .header { background: #2c3e50; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-        .controls { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        select { padding: 8px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; }
+        .header { background: #1a5276; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        .controls { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; gap: 20px; align-items: center; }
+        .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); min-height: 400px; }
+        select { padding: 10px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; min-width: 200px; }
+        label { font-weight: bold; color: #34495e; }
+        
+        /* Metrics styling */
+        .metric-box { text-align: center; padding: 20px; background: #ecf0f1; border-radius: 8px; margin-bottom: 20px; }
+        .metric-val { font-size: 2.5em; font-weight: bold; color: #2c3e50; }
+        .metric-lbl { color: #7f8c8d; }
     </style>
 </head>
 <body>
@@ -20,39 +26,47 @@
 <div class="dashboard-container">
     <div class="header">
         <h1>BERP Interactive Dashboard</h1>
-        <p>Interactive Map & Data Explorer</p>
+        <p>Real-time Impact Tracking & Visualization</p>
     </div>
 
     <div class="controls">
-        <label><b>Filter by Status:</b></label>
-        <select id="statusFilter" onchange="updateDashboard()">
-            <option value="All">All Projects</option>
-            <option value="Yes">Implemented Only</option>
-            <option value="In Progress">In Progress</option>
-        </select>
-        
-        <label style="margin-left: 20px;"><b>Filter by County:</b></label>
-        <select id="countyFilter" onchange="updateDashboard()">
-            <option value="All">All Counties</option>
+        <div>
+            <label>Filter by Status:</label><br>
+            <select id="statusFilter" onchange="updateDashboard()">
+                <option value="All">All Projects</option>
+                <option value="Yes">Implemented Only</option>
+                <option value="In Progress">In Progress</option>
             </select>
+        </div>
+        
+        <div>
+            <label>Filter by County:</label><br>
+            <select id="countyFilter" onchange="updateDashboard()">
+                <option value="All">All Counties</option>
+                </select>
+        </div>
     </div>
 
-    <div class="grid" style="grid-template-columns: 2fr 1fr;">
+    <div class="grid">
         <div class="card">
-            <h3>Utah Impact Map</h3>
-            <div id="utahMap" style="height: 500px;"></div>
+            <h3 style="margin-top:0;">Utah Impact Map</h3>
+            <div id="utahMap" style="height: 500px;">Loading Map...</div>
         </div>
+        
         <div class="card">
-            <h3>Program Metrics</h3>
+            <h3 style="margin-top:0;">Program Metrics</h3>
             <div id="metricsBox">Loading...</div>
-            <div id="costChart" style="height: 400px;"></div>
+            
+            <h3 style="margin-top:20px;">Cost vs. Savings</h3>
+            <div id="costChart" style="height: 300px;"></div>
         </div>
     </div>
 </div>
 
 <script>
     let globalData = [];
-    let geoJsonUrl = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"; // Standard US Counties
+    // This is the standard GeoJSON for all US Counties
+    const geoJsonUrl = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"; 
 
     // 1. Fetch Data
     d3.json('site_data.json').then(function(data) {
@@ -87,58 +101,68 @@
             return statusMatch && countyMatch;
         });
 
-        // Update Map
-        renderMap(filtered);
-        
-        // Update Metrics
-        let totalCO2 = d3.sum(filtered, d => d.Total_CO2_Tons);
-        let totalSavings = d3.sum(filtered, d => d['Total Cost Savings']);
-        document.getElementById('metricsBox').innerHTML = `
-            <h2>${filtered.length} Projects</h2>
-            <h2 style="color:green">${totalCO2.toFixed(1)} Tons CO2</h2>
-            <h2 style="color:blue">$${totalSavings.toLocaleString()} Savings</h2>
-        `;
-
         // Update Charts
+        renderMap(filtered);
+        renderMetrics(filtered);
         renderCostChart(filtered);
     }
 
-    function renderMap(data) {
-        // Aggregate CO2 by County for the map color
-        let countyData = d3.rollup(data, v => d3.sum(v, d => d.Total_CO2_Tons), d => d.County);
-        let mapLocs = Array.from(countyData.keys());
-        let mapVals = Array.from(countyData.values());
+    function renderMetrics(data) {
+        let totalCO2 = d3.sum(data, d => d.Total_CO2_Tons);
+        let totalSavings = d3.sum(data, d => d['Total Cost Savings']);
+        let count = data.length;
 
-        // Note: For a robust Utah map, we usually match County Names to FIPS codes.
-        // For this demo, we use a simple scatter plot on top of a map background
-        // because automatic County Name matching can be tricky without a lookup table.
-        // If you have specific Lat/Lon in your sheet, we can use those!
+        document.getElementById('metricsBox').innerHTML = `
+            <div class="metric-box">
+                <div class="metric-val">${count}</div>
+                <div class="metric-lbl">Projects Selected</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-val" style="color:#27ae60">${totalCO2.toFixed(1)}</div>
+                <div class="metric-lbl">Tons CO2 Reduced</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-val" style="color:#2980b9">$${totalSavings.toLocaleString()}</div>
+                <div class="metric-lbl">Annual Savings</div>
+            </div>
+        `;
+    }
+
+    function renderMap(data) {
+        // We aggregate the Total CO2 by FIPS code to color the map
+        let fipsMap = d3.rollup(data, v => d3.sum(v, d => d.Total_CO2_Tons), d => d.FIPS);
         
-        let trace = {
+        let locations = Array.from(fipsMap.keys());
+        let zValues = Array.from(fipsMap.values());
+        let hoverText = locations.map(fips => {
+            // Find a county name that matches this FIPS for the tooltip
+            let match = data.find(d => d.FIPS === fips);
+            return match ? `${match.County}: ${fipsMap.get(fips).toFixed(1)} Tons` : fips;
+        });
+
+        let mapData = [{
             type: 'choropleth',
-            locationmode: 'USA-states', // We will zoom into Utah
-            locations: Array(mapLocs.length).fill('UT'), // All are in Utah
-            z: mapVals,
-            text: mapLocs,
+            geojson: geoJsonUrl,
+            locations: locations, // The FIPS codes from our data
+            z: zValues,           // The CO2 values
+            text: hoverText,
             colorscale: 'Teal',
-            marker: { line: { width: 0 } }
+            marker: { line: { width: 0.5, color: 'white' } },
+            colorbar: { title: 'CO2 (Tons)' }
+        }];
+
+        let layout = {
+            geo: {
+                scope: 'usa',
+                // Zoom into Utah roughly
+                center: { lon: -111.5, lat: 39.5 },
+                projection: { type: 'albers usa' },
+                fitbounds: "locations" // Auto-zoom to data if possible
+            },
+            margin: {l:0, r:0, t:0, b:0}
         };
 
-        // ALTERNATIVE: BUBBLE MAP (Simpler without FIPS codes)
-        // We will assume some standard lat/lons for demo or just list them.
-        // Since we don't have FIPS codes in your sheet, a Choropleth is hard.
-        // Let's stick to a simple bar chart for counties for now, 
-        // OR ask if you want to add a "FIPS" column to your sheet?
-        
-        // For now, let's render a Bar Chart in the "Map" slot until we solve the GeoJSON link.
-        let mapData = [{
-            x: mapLocs,
-            y: mapVals,
-            type: 'bar',
-            marker: {color: 'teal'}
-        }];
-        
-        Plotly.newPlot('utahMap', mapData, {title: 'CO2 Reduction by County'});
+        Plotly.newPlot('utahMap', mapData, layout, {responsive: true});
     }
 
     function renderCostChart(data) {
@@ -148,13 +172,18 @@
             mode: 'markers',
             type: 'scatter',
             text: data.map(d => d['Recommendation Name']),
-            marker: { size: 10, color: data.map(d => d.Total_CO2_Tons), colorscale: 'Viridis' }
+            marker: { 
+                size: 12, 
+                color: data.map(d => d.Total_CO2_Tons), 
+                colorscale: 'Viridis',
+                showscale: false
+            }
         };
         Plotly.newPlot('costChart', [trace], {
-            title: 'Cost vs Savings (Color=CO2)',
-            xaxis: {title: 'Implementation Cost'},
-            yaxis: {title: 'Annual Savings'}
-        });
+            xaxis: {title: 'Implementation Cost ($)'},
+            yaxis: {title: 'Annual Savings ($)'},
+            margin: {l:50, r:20, t:20, b:40}
+        }, {responsive: true});
     }
 </script>
 
