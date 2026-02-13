@@ -65,7 +65,6 @@
 
 <script>
     let globalData = [];
-    // This is the standard GeoJSON for all US Counties
     const geoJsonUrl = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"; 
 
     // 1. Fetch Data
@@ -77,15 +76,14 @@
 
     // 2. Populate Dropdowns
     function populateFilters() {
-        let counties = [...new Set(globalData.map(d => d.County))].sort();
+        // Get unique counties, filter out empties, and sort
+        let counties = [...new Set(globalData.map(d => d.County))].filter(Boolean).sort();
         let selector = document.getElementById('countyFilter');
         counties.forEach(c => {
-            if(c) {
-                let opt = document.createElement('option');
-                opt.value = c;
-                opt.innerHTML = c;
-                selector.appendChild(opt);
-            }
+            let opt = document.createElement('option');
+            opt.value = c;
+            opt.innerHTML = c;
+            selector.appendChild(opt);
         });
     }
 
@@ -129,72 +127,65 @@
     }
 
     function renderMap(data) {
-        // We aggregate the Total CO2 by FIPS code to color the map
+        // 1. Prepare Data
         let fipsMap = d3.rollup(data, v => d3.sum(v, d => d.Total_CO2_Tons), d => d.FIPS);
-        
         let locations = Array.from(fipsMap.keys());
         let zValues = Array.from(fipsMap.values());
+        
         let hoverText = locations.map(fips => {
-            // Find a county name that matches this FIPS for the tooltip
             let match = data.find(d => d.FIPS === fips);
-            return match ? `${match.County}: ${fipsMap.get(fips).toFixed(1)} Tons` : fips;
+            let val = fipsMap.get(fips).toFixed(1);
+            return match ? `${match.County}: ${val} Tons` : fips;
         });
-        // Create a "Background" trace to show outlines of counties with NO data
+
+        // 2. Define Background Layer (Gray Utah)
+        let allUtahFips = [
+            "49001", "49003", "49005", "49007", "49009", "49011", "49013", "49015", 
+            "49017", "49019", "49021", "49023", "49025", "49027", "49029", "49031", 
+            "49033", "49035", "49037", "49039", "49041", "49043", "49045", "49047", 
+            "49049", "49051", "49053", "49055", "49057"
+        ];
+
         let backgroundTrace = {
             type: 'choropleth',
             geojson: geoJsonUrl,
-            // We need a list of ALL Utah FIPS codes here to draw the full state outline
-            // (You can copy the list I gave you earlier, or just rely on the data trace if most are filled)
-            locations: ["49001", "49003", "49005", "49007", "49009", "49011", "49013", "49015", "49017", "49019", "49021", "49023", "49025", "49027", "49029", "49031", "49033", "49035", "49037", "49039", "49041", "49043", "49045", "49047", "49049", "49051", "49053", "49055", "49057"],
-            z: Array(29).fill(0), // Value 0 for everyone
-            colorscale: [['0.0', '#f0f0f0'], ['1.0', '#f0f0f0']], // Light gray
-            showscale: false, // No color bar for background
-            marker: { line: { width: 1, color: '#dcdcdc' } }, // Gray outlines
-            hoverinfo: 'skip' // Don't show hover tooltips for the background
+            locations: allUtahFips, 
+            z: Array(allUtahFips.length).fill(0),
+            colorscale: [['0.0', '#eeeeee'], ['1.0', '#eeeeee']], 
+            showscale: false, 
+            marker: { line: { width: 0.5, color: '#bdbdbd' } },
+            hoverinfo: 'skip'
         };
 
-        // Update mapData to include both layers (Background first, then Data)
-        let mapData = [backgroundTrace, {
+        // 3. Define Data Layer (Teal Projects)
+        let dataTrace = {
             type: 'choropleth',
             geojson: geoJsonUrl,
-            locations: locations, // The FIPS codes from our data
-            z: zValues,           // The CO2 values
+            locations: locations, 
+            z: zValues,           
             text: hoverText,
             colorscale: 'Teal',
-            marker: { line: { width: 1, color: 'white' } }, // White outlines for active counties
-            colorbar: { title: 'CO2 (Tons)' }
-        }];
-        let mapData = [{
-            type: 'choropleth',
-            geojson: geoJsonUrl,
-            locations: locations, // The FIPS codes from our data
-            z: zValues,           // The CO2 values
-            text: hoverText,
-            colorscale: 'Teal',
-            marker: { line: { width: 0.5, color: 'white' } },
-            colorbar: { title: 'CO2 (Tons)' }
-        }];
+            marker: { line: { width: 1, color: 'white' } },
+            colorbar: { title: 'CO2 (Tons)' },
+            hovertemplate: '<b>%{text}</b><extra></extra>' 
+        };
 
+        // 4. Layout (Zoomed to Utah)
         let layout = {
-            title: {
-                text: 'Utah CO2 Reduction by County',
-                y: 0.95
-            },
+            title: { text: 'Utah CO2 Reduction by County', y: 0.95 },
             geo: {
                 scope: 'usa',
                 projection: { type: 'albers usa' },
                 showlakes: false,
-                // --- ZOOM SETTINGS FOR UTAH ---
-                // We lock the map view to Utah's coordinates
                 center: { lon: -111.5, lat: 39.4 }, 
                 lonaxis: { range: [-114.5, -108.5] },
                 lataxis: { range: [36.5, 42.5] }
             },
             margin: {l:0, r:0, t:30, b:0},
-            dragmode: false // Prevents users from accidentally panning away from Utah
+            dragmode: false
         };
 
-        Plotly.newPlot('utahMap', mapData, layout, {responsive: true});
+        Plotly.newPlot('utahMap', [backgroundTrace, dataTrace], layout, {responsive: true});
     }
 
     function renderCostChart(data) {
