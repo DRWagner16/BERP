@@ -8,7 +8,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # --- CONFIGURATION ---
-SHEET_NAME = "BERP AR Tracker" 
+SHEET_NAME = "BERP AR Tracking" 
 
 # --- 1. AUTHENTICATE ---
 raw_creds = os.environ.get("GCP_SERVICE_ACCOUNT")
