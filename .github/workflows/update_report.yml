@@ -1,9 +1,9 @@
-name: Update BERP Tracking
+name: Update Pollution Report
 
 on:
   schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:
+    - cron: '0 0 * * *' # Runs every day at Midnight UTC
+  workflow_dispatch:      # Allows manual trigger button
 
 permissions:
   contents: write
@@ -19,26 +19,29 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'  # <--- Upgraded to remove warnings
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
-          pip install pandas plotly gspread google-auth
+          pip install pandas gspread google-auth
 
       - name: Run Data Processor
         env:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-        run: python update_data.py  # <--- Changed filename
+        run: python update_data.py
 
       - name: Commit and Push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # We now track the JSON file
+          # We add the JSON file to the commit
           git add site_data.json
-          git commit -m "Update data from Google Sheets" || echo "No changes"
-          git push
+          
+          # Commit only if there are changes
+          if [[ -n $(git status -s) ]]; then
+            git commit -m "Update site_data.json from Google Sheets"
+            git push
           else
             echo "No changes to commit"
           fi
