@@ -40,16 +40,38 @@ for col in numeric_cols:
     if col not in df.columns: df[col] = 0
     df[col] = pd.to_numeric(df[col].astype(str).str.replace(r'[$,%]', '', regex=True), errors='coerce').fillna(0)
 
-# --- NEW: EXTRACT YEAR ---
+# ... (Keep previous code until this section) ...
+
+# --- NEW ROBUST DATE HANDLING ---
 if 'Date of Assessment' in df.columns:
-    # Convert to datetime objects, handling errors
-    df['Date_Obj'] = pd.to_datetime(df['Date of Assessment'], errors='coerce')
-    # Extract the Year (e.g., 2025)
+    # 1. Force to string first (handles both text "12/1/2024" and serials "45201")
+    date_col = df['Date of Assessment'].astype(str)
+    
+    # 2. Convert to datetime, allowing mixed formats
+    # 'coerce' turns errors into NaT (Not a Time)
+    df['Date_Obj'] = pd.to_datetime(date_col, errors='coerce')
+    
+    # 3. Extract Year
     df['Year'] = df['Date_Obj'].dt.year.fillna(0).astype(int)
-    # Drop the temporary object column to keep JSON clean
-    df = df.drop(columns=['Date_Obj'])
+    
+    # 4. DEBUG: If Year is still 0, try a manual string slice (e.g. "2024" from "2024-12-01")
+    # This catches cases where pandas gave up too easily
+    mask_zero = (df['Year'] == 0)
+    if mask_zero.any():
+        # Try to find 4 digits in the string (regex)
+        df.loc[mask_zero, 'Year'] = pd.to_numeric(
+            date_col[mask_zero].str.extract(r'(\d{4})')[0], 
+            errors='coerce'
+        ).fillna(0).astype(int)
+
+    # Clean up
+    if 'Date_Obj' in df.columns:
+        df = df.drop(columns=['Date_Obj'])
 else:
+    print("Warning: 'Date of Assessment' column not found!")
     df['Year'] = 2025 # Default fallback
+
+# ... (Rest of script continues) ...
 
 # Clean FIPS
 if 'FIPS' in df.columns:
