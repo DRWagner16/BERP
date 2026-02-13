@@ -28,8 +28,8 @@ try:
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
     
-    # Clean up column names (strip whitespace)
-    df.columns = df.columns.str.strip()
+    # FIX: Force headers to be strings before stripping whitespace
+    df.columns = df.columns.astype(str).str.strip()
     print("Data loaded successfully.")
     
 except Exception as e:
@@ -46,40 +46,55 @@ numeric_cols = [
     'Implementation Costs'
 ]
 
+# Create columns if they don't exist (to prevent crashes)
 for col in numeric_cols:
-    if col in df.columns:
-        # Remove '$' and ',' then convert to number
-        df[col] = pd.to_numeric(df[col].astype(str).str.replace('$', '').str.replace(',', ''), errors='coerce').fillna(0)
+    if col not in df.columns:
+        df[col] = 0
+
+# Convert to numeric
+for col in numeric_cols:
+    # Force to string first, then clean
+    df[col] = pd.to_numeric(df[col].astype(str).str.replace('$', '').str.replace(',', ''), errors='coerce').fillna(0)
 
 # Filter: We usually only want to report on "Implemented" or "In Progress" projects
-# Adjust this logic based on what you want to show
-implemented_df = df[df['Implemented? Yes/No/In Progress'].isin(['Yes', 'In Progress'])]
+if 'Implemented? Yes/No/In Progress' in df.columns:
+    implemented_df = df[df['Implemented? Yes/No/In Progress'].isin(['Yes', 'In Progress'])]
+else:
+    implemented_df = df # Fallback if column missing
 
 # --- 4. GENERATE VISUALIZATIONS ---
 
-# Chart A: Implementation Status (Pie Chart)
-# Counts how many recommendations are Yes vs No vs In Progress
-status_counts = df['Implemented? Yes/No/In Progress'].value_counts().reset_index()
-status_counts.columns = ['Status', 'Count']
-fig_status = px.pie(status_counts, values='Count', names='Status', 
-                    title='Recommendation Implementation Status',
-                    color_discrete_sequence=px.colors.qualitative.Set2)
+# Chart A: Status
+if 'Implemented? Yes/No/In Progress' in df.columns:
+    status_counts = df['Implemented? Yes/No/In Progress'].value_counts().reset_index()
+    status_counts.columns = ['Status', 'Count']
+    fig_status = px.pie(status_counts, values='Count', names='Status', 
+                        title='Implementation Status',
+                        color_discrete_sequence=px.colors.qualitative.Set2)
+    chart_status_html = fig_status.to_html(full_html=False, include_plotlyjs='cdn')
+else:
+    chart_status_html = "<p>Missing 'Implemented?' column</p>"
 
-# Chart B: Savings by County (Bar Chart)
-# Summing up CO2 savings per county
-county_group = implemented_df.groupby('County')['Equivalent CO2 (ton/yr)'].sum().reset_index()
-fig_county = px.bar(county_group, x='County', y='Equivalent CO2 (ton/yr)', 
-                    title='Total CO2 Reduction by County (Implemented)',
-                    color='Equivalent CO2 (ton/yr)', color_continuous_scale='Teal')
+# Chart B: Savings by County
+if 'County' in implemented_df.columns:
+    county_group = implemented_df.groupby('County')['Equivalent CO2 (ton/yr)'].sum().reset_index()
+    fig_county = px.bar(county_group, x='County', y='Equivalent CO2 (ton/yr)', 
+                        title='CO2 Reduction by County',
+                        color='Equivalent CO2 (ton/yr)', color_continuous_scale='Teal')
+    chart_county_html = fig_county.to_html(full_html=False, include_plotlyjs='cdn')
+else:
+    chart_county_html = "<p>Missing 'County' column</p>"
 
-# Chart C: Cost vs Savings (Scatter Plot)
-fig_cost = px.scatter(implemented_df, x='Implementation Costs', y='Total Cost Savings', 
-                      size='Equivalent CO2 (ton/yr)', color='Equipment Type',
-                      hover_name='Recommendation Name',
-                      title='Implementation Cost vs. Annual Savings')
+# Chart C: Cost vs Savings
+if 'Total Cost Savings' in implemented_df.columns:
+    fig_cost = px.scatter(implemented_df, x='Implementation Costs', y='Total Cost Savings', 
+                          size='Equivalent CO2 (ton/yr)', 
+                          title='Cost vs. Savings (Bubble size = CO2 Impact)')
+    chart_cost_html = fig_cost.to_html(full_html=False, include_plotlyjs='cdn')
+else:
+    chart_cost_html = "<p>Missing Cost columns</p>"
 
 # --- 5. BUILD HTML REPORT ---
-# Calculate Headlines
 total_co2 = implemented_df['Equivalent CO2 (ton/yr)'].sum()
 total_dollars = implemented_df['Total Cost Savings'].sum()
 total_projects = len(implemented_df)
@@ -93,20 +108,11 @@ html_content = f"""
         body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }}
         .header {{ background-color: #2c3e50; color: white; padding: 20px; text-align: center; }}
         .container {{ max-width: 1200px; margin: 20px auto; padding: 20px; }}
-        
-        /* Metric Cards */
         .metrics-row {{ display: flex; justify-content: space-between; margin-bottom: 30px; }}
         .metric-card {{ background: white; padding: 20px; border-radius: 8px; width: 30%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }}
         .metric-value {{ font-size: 2.5em; font-weight: bold; color: #27ae60; }}
         .metric-label {{ color: #7f8c8d; font-size: 1.1em; }}
-        
-        /* Charts */
         .chart-container {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 30px; }}
-        
-        /* Table */
-        table {{ width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }}
-        th, td {{ padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }}
-        th {{ background-color: #f2f2f2; }}
     </style>
 </head>
 <body>
@@ -117,7 +123,6 @@ html_content = f"""
 </div>
 
 <div class="container">
-
     <div class="metrics-row">
         <div class="metric-card">
             <div class="metric-value">{total_projects}</div>
@@ -135,22 +140,16 @@ html_content = f"""
 
     <div style="display: flex; gap: 20px;">
         <div class="chart-container" style="flex: 1;">
-            {fig_status.to_html(full_html=False, include_plotlyjs='cdn')}
+            {chart_status_html}
         </div>
         <div class="chart-container" style="flex: 1;">
-            {fig_county.to_html(full_html=False, include_plotlyjs='cdn')}
+            {chart_county_html}
         </div>
     </div>
 
     <div class="chart-container">
-        {fig_cost.to_html(full_html=False, include_plotlyjs='cdn')}
+        {chart_cost_html}
     </div>
-
-    <div class="chart-container">
-        <h3>Top 10 High-Impact Projects</h3>
-        {implemented_df.sort_values('Equivalent CO2 (ton/yr)', ascending=False).head(10)[['Company', 'Recommendation Name', 'Total Cost Savings', 'Equivalent CO2 (ton/yr)']].to_html(classes='table', index=False)}
-    </div>
-
 </div>
 
 </body>
