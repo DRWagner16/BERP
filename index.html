@@ -139,7 +139,31 @@
             let match = data.find(d => d.FIPS === fips);
             return match ? `${match.County}: ${fipsMap.get(fips).toFixed(1)} Tons` : fips;
         });
+        // Create a "Background" trace to show outlines of counties with NO data
+        let backgroundTrace = {
+            type: 'choropleth',
+            geojson: geoJsonUrl,
+            // We need a list of ALL Utah FIPS codes here to draw the full state outline
+            // (You can copy the list I gave you earlier, or just rely on the data trace if most are filled)
+            locations: ["49001", "49003", "49005", "49007", "49009", "49011", "49013", "49015", "49017", "49019", "49021", "49023", "49025", "49027", "49029", "49031", "49033", "49035", "49037", "49039", "49041", "49043", "49045", "49047", "49049", "49051", "49053", "49055", "49057"],
+            z: Array(29).fill(0), // Value 0 for everyone
+            colorscale: [['0.0', '#f0f0f0'], ['1.0', '#f0f0f0']], // Light gray
+            showscale: false, // No color bar for background
+            marker: { line: { width: 1, color: '#dcdcdc' } }, // Gray outlines
+            hoverinfo: 'skip' // Don't show hover tooltips for the background
+        };
 
+        // Update mapData to include both layers (Background first, then Data)
+        let mapData = [backgroundTrace, {
+            type: 'choropleth',
+            geojson: geoJsonUrl,
+            locations: locations, // The FIPS codes from our data
+            z: zValues,           // The CO2 values
+            text: hoverText,
+            colorscale: 'Teal',
+            marker: { line: { width: 1, color: 'white' } }, // White outlines for active counties
+            colorbar: { title: 'CO2 (Tons)' }
+        }];
         let mapData = [{
             type: 'choropleth',
             geojson: geoJsonUrl,
