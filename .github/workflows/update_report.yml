@@ -1,8 +1,8 @@
-name: Update Pollution Report
+name: Update BERP Data
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs every day at Midnight UTC
+    - cron: '0 6 * * *' # Runs every day at Midnight UTC
   workflow_dispatch:      # Allows manual trigger button
 
 permissions:
