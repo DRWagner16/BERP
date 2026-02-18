@@ -81,8 +81,7 @@
             <select id="metricFilter" onchange="updateDashboard()">
                 <option value="Total_CO2_Tons">CO2 Reduced (Tons)</option>
                 <option value="Total_NOx_lb">NOx Reduced (lbs)</option>
-                <option value="Total_SO2_lb">SO2 Reduced (lbs)</option>
-                <option value="Total_PM25_lb">PM2.5 Reduced (lbs)</option>
+                
                 <option value="Total Cost Savings">Cost Savings ($)</option>
             </select>
         </div>
@@ -139,7 +138,7 @@
         let yearSel = document.getElementById('yearFilter').value;
         let statusSel = document.getElementById('statusFilter').value;
         let countySel = document.getElementById('countyFilter').value;
-        let metricSel = document.getElementById('metricFilter').value; // Get the map metric
+        let metricSel = document.getElementById('metricFilter').value; 
 
         // Filter Data
         let filtered = globalData.filter(d => {
@@ -149,13 +148,12 @@
             return yearMatch && statusMatch && countyMatch;
         });
 
-        // Pass the metric to renderMap
         renderMap(filtered, metricSel);
         renderMetrics(filtered);
         renderCostChart(filtered);
     }
 
-    // 4. Render Metrics Box
+    // 4. Render Metrics Box (HIDDEN SO2/PM2.5)
     function renderMetrics(data) {
         let uniqueReports = new Set(data.map(d => d['Report Number']));
         let assessmentCount = uniqueReports.size;
@@ -185,7 +183,7 @@
                 <div class="metric-val text-green">${totalCO2.toFixed(1)}</div>
                 <div class="metric-lbl">Tons CO2 Reduced</div>
                 <div style="font-size:0.8em; color:#7f8c8d; margin-top:5px;">
-                    <!--  Equivalent to removing <b>${Math.round(totalCars)}</b> cars -->
+                    Equivalent to removing <b>${Math.round(totalCars)}</b> cars
                 </div>
             </div>
 
@@ -195,30 +193,20 @@
             </div>
 
             <h4 style="margin:10px 0 5px 0; color:#34495e; text-align:center;">Air Quality Impact (lbs)</h4>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px;">
-                <div class="metric-box" style="padding:10px;">
+            <div style="display:flex; justify-content:center; gap:10px;">
+                <div class="metric-box" style="padding:10px; width:100px;">
                     <div class="metric-val" style="font-size:1.2em;">${d3.format(",.0f")(totalNOx)}</div>
                     <div class="metric-lbl">NOx</div>
                 </div>
-                <div class="metric-box" style="padding:10px;">
-                    <div class="metric-val" style="font-size:1.2em;">${d3.format(",.0f")(totalSO2)}</div>
-                    <div class="metric-lbl">SO2</div>
+                
                 </div>
-                <div class="metric-box" style="padding:10px;">
-                    <div class="metric-val" style="font-size:1.2em;">${d3.format(",.0f")(totalPM25)}</div>
-                    <div class="metric-lbl">PM2.5</div>
-                </div>
-            </div>
         `;
     }
 
-    // 5. Render Map (With Dynamic Metric & Fixes)
+    // 5. Render Map
     function renderMap(data, metric) {
-        // --- FIX 1: CLEAR LOADING TEXT ---
-        // We manually empty the div so the loading text disappears completely
         document.getElementById('utahMap').innerHTML = '';
 
-        // Determine nice label for hover
         let metricLabels = {
             'Total_CO2_Tons': 'Tons CO2',
             'Total_NOx_lb': 'lbs NOx',
@@ -228,10 +216,8 @@
         };
         let label = metricLabels[metric] || 'Value';
 
-        // Update Title
         document.getElementById('mapTitle').innerText = `Utah Impact: ${label}`;
 
-        // Aggregate Data based on selected metric
         let fipsMap = d3.rollup(data, v => d3.sum(v, d => d[metric]), d => d.FIPS);
         let locations = Array.from(fipsMap.keys());
         let zValues = Array.from(fipsMap.values());
@@ -239,11 +225,9 @@
         let hoverText = locations.map(fips => {
             let match = data.find(d => d.FIPS === fips);
             let val = fipsMap.get(fips);
-            // Format number (comma separated, 1 decimal)
             return match ? `${match.County}: ${d3.format(",.1f")(val)} ${label}` : fips;
         });
 
-        // Background Layer (Gray Utah)
         let allUtahFips = ["49001", "49003", "49005", "49007", "49009", "49011", "49013", "49015", "49017", "49019", "49021", "49023", "49025", "49027", "49029", "49031", "49033", "49035", "49037", "49039", "49041", "49043", "49045", "49047", "49049", "49051", "49053", "49055", "49057"];
         
         let backgroundTrace = {
@@ -252,7 +236,6 @@
             showscale: false, marker: { line: { width: 0.5, color: '#bdbdbd' } }, hoverinfo: 'skip'
         };
 
-        // Data Layer
         let dataTrace = {
             type: 'choropleth', geojson: geoJsonUrl, locations: locations, z: zValues, text: hoverText,
             colorscale: 'Teal', marker: { line: { width: 1, color: 'white' } }, 
@@ -261,17 +244,11 @@
         };
 
         let layout = {
-            // Title handled in HTML above to avoid border issues
             margin: {l:0, r:0, t:0, b:0}, 
             geo: {
                 projection: { type: 'mercator' },
                 showlakes: false,
-                
-                // --- FIX 2: REMOVE BLACK BORDER ---
-                showframe: false,      // Removes the box around the map
-                showcoastlines: false, // Removes coastlines (irrelevant for Utah)
-                
-                // Zoom
+                showframe: false, showcoastlines: false,
                 center: { lon: -111.5, lat: 39.4 }, 
                 lonaxis: { range: [-114.5, -108.5] }, 
                 lataxis: { range: [36.5, 42.5] }
